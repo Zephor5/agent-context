@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Agent Context</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
+<body>
+<header class="top"><a class="brand" href="/">▤ <strong>agent-context</strong></a><span id="vault-name"></span><span id="connection" role="status">正在连接…</span></header>
+<div id="app" class="board overview">
+<nav aria-label="工作空间"><p class="eyebrow">工作空间</p><button data-area="board" aria-current="page">▦ 黑板 <span id="count-board">0</span></button><button data-area="wiki">▤ Wiki <span id="count-wiki">0</span></button><button data-area="raw">▱ 原始记录 <span id="count-raw">0</span></button><div class="nav-note">本机工作空间<br><span>Markdown · 本地文件</span></div></nav>
+<section class="index" aria-label="内容列表"><div class="list-head"><div><h1 id="area-title">黑板</h1><p id="subtitle">跨工具交接与本机工作状态</p></div><button id="new" class="primary">＋ 新建</button></div><label class="search"><span>⌕</span><input id="query" type="search" placeholder="搜索 key 或正文" aria-label="搜索内容"></label><div class="list-meta"><span id="list-count"></span><button id="refresh">刷新</button></div><div id="items"></div></section>
+<main id="detail"><button id="back" class="text-button">← 返回总览</button><div class="toolbar"><span id="location"></span><div class="actions"><button id="commit" hidden>提交到 Git</button><button id="cancel" hidden>取消</button><button id="edit" class="primary" hidden>编辑</button></div></div>
+<div id="external" class="notice" hidden><span id="external-message">内容已有更新，当前草稿已保留。</span><button id="latest">查看最新内容</button></div>
+<article id="reader" class="markdown"><div class="empty">选择一条记录开始阅读</div></article>
+<section id="editor" hidden><label id="name-label"><span id="name-caption">条目 key</span><input id="name" autocomplete="off"></label><div class="editor-head"><span>Markdown</span><button id="preview">预览</button></div><textarea id="source" aria-label="Markdown 正文" spellcheck="false"></textarea><article id="preview-body" class="markdown" hidden></article><div class="editor-foot"><span id="save-hint"></span><span id="dirty"></span></div></section>
+<footer><span id="meta"></span><button id="delete" class="text-button" hidden>删除条目</button></footer></main>
+</div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<dialog id="dialog"><form method="dialog"><div class="dialog-head"><h2 id="dialog-title"></h2><button value="cancel" aria-label="关闭" formnovalidate>×</button></div><p id="dialog-message"></p><div id="dialog-content"></div><div class="dialog-actions"><button value="cancel" id="dialog-cancel" formnovalidate>取消</button><button value="confirm" id="dialog-confirm" class="primary">确认</button></div></form></dialog>
+</body></html>

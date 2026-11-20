@@ -1,0 +1,6 @@
+.agent-context/pending.json
+.agent-context/tmp/
+.agent-context/board.lock
+board/
+.obsidian/workspace*.json
+.DS_Store

@@ -1,0 +1,3 @@
+# Local-only artifacts of this plugin; nothing here belongs in the vault repo.
+node_modules/
+*.tgz

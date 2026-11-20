@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "agent-context 个人 wiki",
+    "description": "与其他 agent 工具共享同一份个人 wiki 和本机黑板。注册 agent-context MCP 服务（stdio），让会话能检索和追加记录、读写本机工作状态。需要把 vaultRoot 设为一个已存在的 vault；未配置时插件不做任何事。"
+  }
+}
