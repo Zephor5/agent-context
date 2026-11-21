@@ -40,7 +40,8 @@
   "scripts": {
     "test": "node --test",
     "prepack": "npm run build:web && node scripts/check-native.mjs",
-    "build:web": "node scripts/build-web.mjs"
+    "build:web": "node scripts/build-web.mjs",
+    "fetch:native": "node scripts/fetch-native.mjs"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "~3.18.5"
@@ -62,5 +63,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "agentContext": {
+    "cliVersion": "0.1.0"
   }
 }

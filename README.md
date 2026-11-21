@@ -23,7 +23,7 @@
 
 ## 安装
 
-agent-context 没有发布到 crates.io，需要从源码编译：
+独立 CLI 自下一次升版起在 [GitHub Releases](https://github.com/Zephor5/agent-context/releases) 提供五个平台的预编译程序，标签格式为 `cli-v<版本>`。也可以从源码安装：
 
 ```sh
 git clone https://github.com/Zephor5/agent-context.git

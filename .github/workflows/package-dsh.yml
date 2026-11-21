@@ -1,14 +1,53 @@
-name: Build DSH plugin
+name: Release CLI and DSH plugin
 on:
   workflow_dispatch:
   pull_request:
   push:
     branches: [main]
+    paths:
+      - Cargo.toml
+      - integrations/dsh/package.json
 permissions:
   contents: read
 
+concurrency:
+  group: agent-context-release-${{ github.ref }}
+  queue: max
+
 jobs:
+  versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      cli: ${{ steps.version.outputs.cli }}
+      plugin: ${{ steps.version.outputs.plugin }}
+      cli_version: ${{ steps.version.outputs.cli_version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Detect version increases across the push
+        id: version
+        if: github.event_name == 'push'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: python3 .github/scripts/versions.py "$BEFORE" >> "$GITHUB_OUTPUT"
+
+  test-plugin:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - run: npm test --prefix integrations/dsh && npm run build:web --prefix integrations/dsh
+
   native:
+    needs: versions
+    if: needs.versions.outputs.cli == 'true'
     strategy:
       matrix:
         include:
@@ -35,6 +74,12 @@ jobs:
           dest=integrations/dsh/native/${{ matrix.platform }}
           mkdir -p "$dest"
           cp target/${{ matrix.target }}/release/agent-context${{ runner.os == 'Windows' && '.exe' || '' }} "$dest/"
+      - name: Check executable version
+        env:
+          CLI_VERSION: ${{ needs.versions.outputs.cli_version }}
+        run: |
+          exe=integrations/dsh/native/${{ matrix.platform }}/agent-context${{ runner.os == 'Windows' && '.exe' || '' }}
+          test "$("$exe" --version | tr -d '\r')" = "agent-context $CLI_VERSION"
       - name: Test with a clean vault and the packaged executable
         working-directory: integrations/dsh
         env:
@@ -46,24 +91,102 @@ jobs:
           path: integrations/dsh/native/${{ matrix.platform }}/
           if-no-files-found: error
 
+  cli-release:
+    needs: [versions, native]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - name: Publish the tested native executables
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLI_VERSION: ${{ needs.versions.outputs.cli_version }}
+        run: bash .github/scripts/release-cli.sh
+
   package:
-    needs: native
+    needs: [versions, cli-release]
+    if: >-
+      ${{ !cancelled() && needs.versions.result == 'success' &&
+          (needs.cli-release.result == 'success' || needs.cli-release.result == 'skipped') &&
+          (needs.versions.outputs.cli != 'true' || needs.cli-release.result == 'success') &&
+          (needs.versions.outputs.plugin == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - uses: actions/download-artifact@v8
-        with:
-          path: integrations/dsh/native
       - working-directory: integrations/dsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          chmod 755 native/*/agent-context
-          npm test
+          npm run fetch:native
+          REQUIRE_NATIVE=1 npm test
           npm pack --pack-destination "$RUNNER_TEMP"
+          cd "$(mktemp -d)"
+          npm install --ignore-scripts --no-audit --no-fund "$RUNNER_TEMP"/zephor-dsh-agent-context-*.tgz
+          node --input-type=module -e "import '@zephor/dsh-agent-context'; import '@zephor/dsh-agent-context/web-host'"
       - uses: actions/upload-artifact@v7
         with:
           name: dsh-agent-context-npm
           path: ${{ runner.temp }}/zephor-dsh-agent-context-*.tgz
           if-no-files-found: error
+
+  publish:
+    needs: [versions, package]
+    if: >-
+      ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' &&
+          needs.versions.outputs.plugin == 'true' && needs.package.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - uses: actions/download-artifact@v8
+        with:
+          name: dsh-agent-context-npm
+          path: release
+      - name: Publish the tested immutable npm version via OIDC
+        run: bash .github/scripts/publish-dsh.sh
+
+  refresh-index:
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
+        with:
+          name: dsh-agent-context-npm
+          path: release
+      - name: Check anonymous download against the tested archive
+        id: verify
+        run: python3 .github/scripts/verify-public-npm.py >> "$GITHUB_OUTPUT"
+      - name: Request DSH index refresh
+        if: steps.verify.outputs.stable == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.DSH_INDEX_DISPATCH_TOKEN }}
+        run: |
+          : "${GH_TOKEN:?Configure DSH_INDEX_DISPATCH_TOKEN with Actions write access to Zephor5/dsh-plugins}"
+          gh workflow run plugin-index.yml --repo Zephor5/dsh-plugins --ref main
