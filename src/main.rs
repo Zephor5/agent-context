@@ -27,6 +27,9 @@ enum Cmd {
     Serve,
     /// Open the local blackboard and Wiki in your browser (remembers this vault)
     Web {
+        /// Serve the same Web API over stdin/stdout for local application integrations
+        #[arg(long, conflicts_with = "port")]
+        stdio: bool,
         /// Listen on this loopback port; 0 chooses an available port
         #[arg(long, default_value_t = 7420)]
         port: u16,
@@ -153,12 +156,20 @@ fn run() -> Result<ExitCode> {
                 .build()?
                 .block_on(mcp::serve(vault))?;
         }
-        Cmd::Web { port, no_open } => {
+        Cmd::Web {
+            port,
+            no_open,
+            stdio,
+        } => {
             let vault = agent_context::web::open_vault(root)?;
-            tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()?
-                .block_on(agent_context::web::serve(vault, port, !no_open))?;
+            if stdio {
+                agent_context::web::serve_stdio(vault)?;
+            } else {
+                tokio::runtime::Builder::new_multi_thread()
+                    .enable_all()
+                    .build()?
+                    .block_on(agent_context::web::serve(vault, port, !no_open))?;
+            }
         }
         Cmd::Pending { json } => {
             let records = open(root)?.pending()?;

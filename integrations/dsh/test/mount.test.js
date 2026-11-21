@@ -1,7 +1,7 @@
 /**
  * Registration behaviour against a fake cordis context: the exact register
- * payload, disposal through ctx.effect, staying inert when unconfigured, and
- * never writing anything.
+ * payload, disposal through ctx.effect, missing executable diagnostics, and
+ * preserving an existing vault.
  *
  * Run with `node --test test/` — this file imports nothing outside node:*.
  */
@@ -68,7 +68,7 @@ function createCtx() {
 
 /** Isolation: no PATH, and a home directory without ~/.cargo/bin. */
 function searchNothing() {
-  return { env: { PATH: '' }, homedir: tempDir('home') };
+  return { env: { PATH: '' }, homedir: tempDir('home'), nativeRoot: tempDir('no-bundle') };
 }
 
 describe('mountAgentContext', () => {
@@ -156,34 +156,11 @@ describe('mountAgentContext', () => {
   });
 });
 
-describe('mountAgentContext when it should stay inert', () => {
-  it('does nothing without a vaultRoot', () => {
+describe('mountAgentContext activation', () => {
+  it('reports a missing local and packaged executable', () => {
     const { ctx, state } = createCtx();
-    const outcome = mountAgentContext(
-      ctx,
-      { serverName: 'agent-context', vaultRoot: '', binaryPath: binary('bin-inert') },
-      searchNothing(),
-    );
-
-    assert.deepEqual(outcome, { registered: false, reason: 'vault-not-configured' });
+    assert.throws(() => mountAgentContext(ctx, { serverName: 'agent-context' }, searchNothing()), /no executable/);
     assert.deepEqual(state.registrations, []);
-    assert.deepEqual(state.effects, []);
-    assert.equal(state.warn.length, 0);
-    assert.match(state.info.join('\n'), /vaultRoot/);
-  });
-
-  it('does nothing when the executable cannot be found', () => {
-    const { ctx, state } = createCtx();
-    const outcome = mountAgentContext(
-      ctx,
-      { serverName: 'agent-context', vaultRoot: vaultDir('vault-no-bin'), binaryPath: '' },
-      searchNothing(),
-    );
-
-    assert.deepEqual(outcome, { registered: false, reason: 'binary-not-found' });
-    assert.deepEqual(state.registrations, []);
-    assert.deepEqual(state.effects, []);
-    assert.match(state.warn.join('\n'), /not found/);
   });
 
   it('writes nothing into the vault and creates no directories', () => {
@@ -261,7 +238,7 @@ describe('mountAgentContext configuration errors', () => {
   it('works without a logger', () => {
     const { ctx } = createCtx();
     delete ctx.logger;
-    const outcome = mountAgentContext(ctx, { serverName: 'agent-context', vaultRoot: '' }, searchNothing());
-    assert.deepEqual(outcome, { registered: false, reason: 'vault-not-configured' });
+    const outcome = mountAgentContext(ctx, { serverName: 'agent-context', vaultRoot: vaultDir('quiet'), binaryPath: binary('quiet') }, searchNothing());
+    assert.equal(outcome.registered, true);
   });
 });

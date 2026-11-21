@@ -1,0 +1,69 @@
+name: Build DSH plugin
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      matrix:
+        include:
+          - { runner: macos-15, platform: darwin-arm64, target: aarch64-apple-darwin }
+          - { runner: macos-15-intel, platform: darwin-x64, target: x86_64-apple-darwin }
+          - { runner: ubuntu-24.04, platform: linux-x64, target: x86_64-unknown-linux-musl }
+          - { runner: ubuntu-24.04-arm, platform: linux-arm64, target: aarch64-unknown-linux-musl }
+          - { runner: windows-2022, platform: win32-x64, target: x86_64-pc-windows-msvc }
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y musl-tools
+      - name: Build CLI
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo build --locked --release --target ${{ matrix.target }}
+          dest=integrations/dsh/native/${{ matrix.platform }}
+          mkdir -p "$dest"
+          cp target/${{ matrix.target }}/release/agent-context${{ runner.os == 'Windows' && '.exe' || '' }} "$dest/"
+      - name: Test with a clean vault and the packaged executable
+        working-directory: integrations/dsh
+        env:
+          REQUIRE_NATIVE: 1
+        run: node --test test/oneclick.test.js test/web-host.test.js
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: integrations/dsh/native/${{ matrix.platform }}/
+          if-no-files-found: error
+
+  package:
+    needs: native
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@v8
+        with:
+          path: integrations/dsh/native
+      - working-directory: integrations/dsh
+        run: |
+          chmod 755 native/*/agent-context
+          npm test
+          npm pack --pack-destination "$RUNNER_TEMP"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dsh-agent-context-npm
+          path: ${{ runner.temp }}/zephor-dsh-agent-context-*.tgz
+          if-no-files-found: error

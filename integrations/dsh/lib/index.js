@@ -7,22 +7,19 @@
  *
  * Named exports only. A default export would hide the loader metadata (`name`,
  * `inject`, `Config`) from the cordis loader, which is why the host's own
- * plugins and `dsh-acp-resume` avoid one.
+ * plugins avoid one.
  *
  * `inject: ['mcpManager']` means `apply` runs while the MCP manager service is
  * present and is torn down with it; the registration itself is held by
  * `ctx.effect`, so disabling or reconfiguring the plugin unregisters the
  * server.
  *
- * The plugin is inert until configured. With no `vaultRoot` it registers
- * nothing, and it never creates a vault, installs, builds, or downloads the
- * executable, writes to the vault, or prompts.
- *
  * @module dsh-agent-context
  */
 
 import z from '@deepseek-ai/schemastery';
 
+import { attachVault } from './web-host.js';
 import { mountAgentContext } from './mount.js';
 
 export const name = 'agent-context';
@@ -38,13 +35,13 @@ export const Config = z.object({
     .string()
     .default('')
     .description(
-      'Absolute path of the vault, passed to the server as AGENT_CONTEXT_ROOT. It must already exist and contain raw/ and wiki/ (create it with `agent-context init <dir>`). "~" is not expanded. Empty: the server is not registered.',
+      'Absolute path of the vault, passed to the server as AGENT_CONTEXT_ROOT. It must already exist and contain raw/ and wiki/ (create it with `agent-context init <dir>`). "~" is not expanded. Empty: reuse an existing vault or initialize the managed user vault.',
     ),
   binaryPath: z
     .string()
     .default('')
     .description(
-      'Absolute path of the agent-context executable. Empty: absolute PATH entries are searched, then ~/.cargo/bin. When set, the path is used as given and must be an executable file — there is no fallback.',
+      'Absolute path of the agent-context executable. Empty: absolute PATH entries are searched, then Cargo’s bin directory and the bundled executable. When set, the path is used as given and must be an executable file — there is no fallback.',
     ),
 });
 
@@ -54,5 +51,6 @@ export const Config = z.object({
  */
 export function apply(ctx, config) {
   // schemastery has already applied every default, so `config` is complete.
-  mountAgentContext(ctx, config);
+  const registration = mountAgentContext(ctx, config);
+  ctx.effect(() => attachVault(ctx, registration));
 }

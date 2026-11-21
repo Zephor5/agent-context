@@ -1,90 +1,42 @@
-# dsh-agent-context
+# Agent Context · 个人知识库
 
-把 agent-context 接入 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的 Host 插件：向宿主的 `mcpManager` 注册一个 stdio MCP 服务（`agent-context serve`），让 DSH 会话和本机其他 agent 工具共用同一份个人 wiki vault 和黑板。
+`@zephor/dsh-agent-context` 让 DSH 会话通过本机 MCP 服务检索 wiki、追加记录和共享黑板。安装包随附预编译的 `agent-context`，覆盖 macOS（Apple Silicon、Intel）、Linux（x64、ARM64）和 Windows x64。用户无需安装 Rust 或手动启动 CLI。
 
-插件本身不实现任何工具，工具来自 agent-context 自己的 MCP 服务：`wiki_capture` / `wiki_search` / `wiki_read` 和 `board_*`（见仓库根 README）。
+## 在 DSH 中使用
 
-## 前置条件
+在「插件」中安装并启用组合包。首发前可通过「添加插件」选择构建产出的本地 `.tgz`；发布后可直接按包名安装。按宿主提示重启或开新会话，然后试一句「列出本机黑板条目」。新知识库的列表可能为空。会话可通过 MCP 工具读写所选知识库。
 
-- DSH Desktop **0.2.2-rc.3 或更新**（`mcpManager` 服务、`dsh.bundle.patch` 装载方式），Node **>= 24**。
-- 已安装 `agent-context`（`cargo install --locked --path .`，默认装到 `~/.cargo/bin`）。
-- 已有一个 vault（`agent-context init <目录>`）。插件不会替你创建。
+初次使用会自动初始化本人的知识库。macOS 和 Linux 默认路径是 `~/.local/share/agent-context/vault`，Windows 默认路径是 `%LOCALAPPDATA%/agent-context/vault`；设置了绝对路径 `XDG_DATA_HOME` 时使用其下的 `agent-context/vault`。重启、升级或从其他 DSH profile 启用时都会复用该目录。缺少 Git 时，内置 CLI 仍可初始化 wiki 和黑板；需要提交历史时再安装 Git 并初始化仓库。
 
-## 配置项
+## 在 DSH 里打开工作台
 
-| 配置项 | 默认值 | 说明 |
-|---|---|---|
-| `serverName` | `agent-context` | 注册到宿主的 MCP 服务名，必须匹配 `^[A-Za-z0-9_-]{1,32}$`。 |
-| `vaultRoot` | 空 | vault 的**绝对路径**，作为 `AGENT_CONTEXT_ROOT` 传给服务。不展开 `~`。 |
-| `binaryPath` | 空 | `agent-context` 可执行文件的**绝对路径**。留空则自动查找。 |
+点击 DSH 左侧的 **Agent Context**，在主区域查看或编辑当前知识库。若这个 Host 启用了多个 agent-context 实例，可在页面上选择服务名。黑板、Wiki、原始记录、Markdown 预览和单页 Git 提交与独立 Web 使用同一套页面和接口。离开侧栏页面再回来时，当前 DSH 客户端会保留该库的编辑草稿；刷新整个 DSH 窗口会清除内存草稿。
 
-解析规则，三条都是“失败就不生效”，不猜：
+工作台在首次请求时通过包内 CLI 的 `web --stdio` 通道读取当前 vault，由 DSH Host 校验访问者。它不占用本机 Web 端口，也不改动独立 Web 的根目录配置。关掉插件会关闭该通道。已有 CLI 可以继续提供 MCP 服务。单页 Git 提交需要本机有 Git 且知识库已经初始化 Git 仓库。
 
-- **`binaryPath` 显式配置时**：必须是绝对路径且是本进程可执行的普通文件，否则报错，**不回退**到自动查找。你指定了哪个文件，就只用那个文件。
-- **`binaryPath` 留空时**：依次查找 `PATH` 中的**绝对**条目（相对条目和空条目会跳过，它们依赖宿主的工作目录），再查找 `~/.cargo/bin`。查找只用 `fs` 探测，不启动 shell，所以不受登录 shell 的 profile 脚本影响。找不到就只记一条告警，不注册。
-- **`vaultRoot` 必须显式配置**：绝对路径、已存在的目录，且含 `raw/` 和 `wiki/` 两个子目录——与 `src/vault.rs` 里 `Vault::open` 的判定一致。留空时插件什么都不做（只记一条 info），配错时直接报错，让它在插件页面上可见。
+## 已有安装与配置
 
-## 本地安装
+- **可执行文件**依次查找显式 `binaryPath`、PATH 中的绝对目录、Cargo bin 目录、包内当前平台的程序。自定义路径须可执行。
+- **知识库**依次采用显式 `vaultRoot`、环境变量 `AGENT_CONTEXT_ROOT`、`agent-context web` 记住的目录、已有的 `~/agent-context` vault、上述默认目录。旧库会原地打开。其他位置的旧库可以用绝对路径指定。
+- 显式配置或 Web 记录指向无效目录时，修正路径后重新启用。已有的非 vault 目录会受到保护。
+- 旧本地包 `dsh-agent-context` 用户先记录自定义路径，再停用旧组合包、启用新版。保留已有条目 ID `mcp-agent-context` 和服务名 `agent-context`。若 profile 覆盖项指定了旧模块 `name`，把该字段改为 `"@zephor/dsh-agent-context"`。已有同名手工 MCP 注册时先移除重复注册，保留原 vault。
+- 多个 vault 可以用不同条目 ID、`serverName` 和 `vaultRoot` 挂载。卸载插件会撤回其 MCP 注册，知识库保留在原处。
 
-插件尚未发布。可以从仓库打包，再通过 DSH 的 **插件 → 添加插件** 安装生成的 `.tgz`（也可用插件管理工具安装该文件的绝对路径）：
-
-```sh
-cd <agent-context 仓库>/integrations/dsh
-npm pack
-```
-
-用打包文件安装会解析 Host 入口所需的依赖；直接链接源码目录时，需要在目录中先准备好依赖。启用 bundle 后，在当前 profile 的用户 `cordis.patch.yml` 中按 id 覆盖配置（不要再插入同一个插件）：
+需要自定义时，在当前 profile 的 `cordis.patch.yml` 覆盖已启用组合包的配置。例如：
 
 ```yaml
 - id: mcp-agent-context
   config:
-    vaultRoot: /绝对路径/my-context
-    binaryPath: /绝对路径/agent-context # 可省略：自动查 PATH 和 ~/.cargo/bin
+    vaultRoot: /absolute/path/to/my-vault
+    binaryPath: /absolute/path/to/agent-context
 ```
 
-如果配置没有实时生效，重启 DSH。确认 MCP 已连接后开新会话，试 `wiki_search` 等只读工具。不要拿真实 vault 测试写入工具。
+两个路径都可留空。要查看工具，打开 DSH 的 MCP 设置检查 `agent-context` 的连接状态。接口和维护流程见[项目说明](https://github.com/Zephor5/agent-context#readme)。
 
-DSH 会读取 MCP 服务自带的检索和协作指令；插件不会注入自动记录授权。只有用户明确授权后才应添加这类全局指令。
+## 开发与打包
 
-## 复用
+运行 `npm test` 检查配置选择、注册和卸载。仓库中的 **Build DSH plugin** 工作流在各平台从同一份 `Cargo.lock` 编译 release 程序，验证首次启动和 MCP 握手，再将五个程序放进同一个 npm 安装包。下载 `dsh-agent-context-npm` artifact，解压即可获得 DSH 可安装的 `.tgz`。工作流仅构建测试包。正式打包要求五个平台的文件齐全。
 
-- **换一台机器**：把 tarball 或 `integrations/dsh/` 目录拷过去，重复上面的安装步骤。包里没有写死任何本机路径，所有路径都来自配置项。
-- **多个 profile**（如 `desktop` 和 `web`）：每个 profile 有各自的 `node_modules`，逐个安装，各自配置。
-- **多个 vault**：装一次即可，用不同 `serverName` + 不同 `vaultRoot` 插入多个实例（`id` 也要不同）。
+本平台开发时，在仓库根目录执行 `cargo build --locked --release`，将 `target/release/agent-context`（Windows 为 `agent-context.exe`）放到本插件的 `native/<platform>-<arch>/`。进入插件目录运行 `npm test`，运行 `npm run build:web` 后可用 `npm pack --ignore-scripts` 生成仅用于本机试装的单平台包。
 
-## 边界
-
-插件刻意不做这些事：
-
-- 不创建 vault，不执行 `agent-context init`，不编译、不下载、不安装任何东西。
-- 不向 vault 写入任何内容，不主动发起提示或询问。
-- 不启动 shell 做路径解析，不读写 DSH profile 以外的配置，不修改你的 profile。
-- 除 `AGENT_CONTEXT_ROOT` 外不向子进程注入环境变量（其余环境由宿主提供）。
-
-注意一点：接上之后 vault 的内容可以进入会话上下文，也能被会话追加记录。vault 里放什么、给哪个会话用，由你决定。
-
-## 测试
-
-```sh
-cd <agent-context 仓库>/integrations/dsh
-npm test
-```
-
-用 `node:test`，不需要安装依赖：被测的 `lib/resolve.js` 和 `lib/mount.js` 只依赖 `node:*`，宿主交互在测试里用假的 cordis context（记录 `mcpManager.register` 的入参、`ctx.effect` 收到的 disposer）。`lib/index.js` 只放 loader 元数据和 schemastery 的 `Config`，需要在装好依赖的 profile 里才能导入。
-
-以 root 身份运行时，`access(X_OK)` 对任意文件都返回成功，相关用例会自动跳过；Windows 上执行位无意义的用例同样跳过。
-
-## 公开发布清单
-
-发布前要确认的事，按顺序：
-
-1. 本包采用 [MIT 许可证](LICENSE)。首次正式发布到 npm 前，确认包名、作用域及发布权限，再移除 `package.json` 的 `private` 标记。
-2. 补充英文 README；中英文展示信息见 `locale/`。
-3. 如需进入 DSH 插件市场，按目标市场的要求准备元数据。
-4. 核对 `engines.dsh` 声明的兼容范围。
-5. 在干净的 profile 中测试启用、停用、重载和修改配置，并在 CI 中运行 `npm test`。
-6. 发布说明应说明会话可以读取和写入指定 vault。
-
-## 验证范围
-
-已对照 DSH Desktop 0.2.2-rc.3 的 `mcpManager.register()` 接口；未在实际 DSH profile 里安装或加载。单元测试与临时 vault 的 CLI stdio 只读测试不代表 DSH 内端到端已验证。
+[MIT 许可证](LICENSE)

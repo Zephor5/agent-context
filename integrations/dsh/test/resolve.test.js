@@ -182,7 +182,7 @@ describe('resolveBinary search order', () => {
     assert.notEqual(resolved.path, file);
 
     // With only unusable entries there is no result at all.
-    assert.equal(resolveBinary('', { env: { PATH: ['', relEntry, '.'].join(delimiter) }, homedir: home() }), null);
+    assert.equal(resolveBinary('', { env: { PATH: ['', relEntry, '.'].join(delimiter) }, nativeRoot: home(), homedir: home() }), null);
   });
 
   it('falls back to ~/.cargo/bin when PATH has nothing', () => {
@@ -197,7 +197,7 @@ describe('resolveBinary search order', () => {
       path: file,
       source: 'cargo',
     });
-    assert.deepEqual(resolveBinary(undefined, { env: {}, homedir: fakeHome }), {
+    assert.deepEqual(resolveBinary(undefined, { env: {}, nativeRoot: fakeHome, homedir: fakeHome }), {
       path: file,
       source: 'cargo',
     });
@@ -220,9 +220,9 @@ describe('resolveBinary search order', () => {
 
   it('returns null when nothing is installed', () => {
     const fakeHome = tempDir('home-bare');
-    assert.equal(resolveBinary('', { env: { PATH: tempDir('nothing') }, homedir: fakeHome }), null);
-    assert.equal(resolveBinary('', { env: {}, homedir: fakeHome }), null);
-    assert.equal(resolveBinary('', { env: {}, homedir: '' }), null);
-    assert.equal(resolveBinary('', { env: {}, homedir: 'relative-home' }), null);
+    assert.equal(resolveBinary('', { env: { PATH: tempDir('nothing') }, nativeRoot: fakeHome, homedir: fakeHome }), null);
+    assert.equal(resolveBinary('', { env: {}, nativeRoot: fakeHome, homedir: fakeHome }), null);
+    assert.equal(resolveBinary('', { env: {}, nativeRoot: fakeHome, homedir: '' }), null);
+    assert.equal(resolveBinary('', { env: {}, nativeRoot: fakeHome, homedir: 'relative-home' }), null);
   });
 });

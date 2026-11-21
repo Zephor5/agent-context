@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "agent-context wiki",
-    "description": "Share one personal wiki and blackboard with your other agent tools. Registers the agent-context MCP server (stdio) so a session can search and append notes and read or update local working state. Set vaultRoot to an existing vault; until then the plugin stays inactive."
+    "title": "Agent Context · Personal wiki",
+    "description": "Search your knowledge, capture notes, and share a local blackboard in DSH. Existing settings take priority; first-time users get a new vault."
   }
 }

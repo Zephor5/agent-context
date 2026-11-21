@@ -1,0 +1,46 @@
+name: One-time npm release for DSH 0.2.1
+on:
+  workflow_dispatch:
+    inputs:
+      build_run:
+        description: Successful Build DSH plugin run for this main commit
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Verify the build
+        env:
+          RUN_ID: ${{ inputs.build_run }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" | jq -e --arg sha "$GITHUB_SHA" '.head_sha == $sha and .head_branch == "main" and .event == "push" and .conclusion == "success" and .path == ".github/workflows/package-dsh.yml"'
+      - uses: actions/download-artifact@v8
+        with:
+          name: dsh-agent-context-npm
+          path: release
+          run-id: ${{ inputs.build_run }}
+          github-token: ${{ github.token }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Publish only the 0.2.1 archive
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
+        run: |
+          archive=release/zephor-dsh-agent-context-0.2.1.tgz
+          tar -xOzf "$archive" package/package.json | jq -e '.name == "@zephor/dsh-agent-context" and .version == "0.2.1"'
+          for platform in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-x64; do
+            bin=agent-context
+            if [[ "$platform" == win32-* ]]; then bin=agent-context.exe; fi
+            tar -tzf "$archive" "package/native/$platform/$bin"
+          done
+          npm publish "$archive" --registry https://registry.npmjs.org --access public --provenance --ignore-scripts

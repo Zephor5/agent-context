@@ -12,7 +12,7 @@
  *   not a different binary found somewhere on PATH.
  * - A vault root must be an absolute, existing directory that really is a
  *   vault (`raw/` and `wiki/`, the same two directories `Vault::open` requires
- *   in `src/vault.rs`). Nothing is ever created to make it one.
+ *   in `src/vault.rs`). Explicit roots are validated without modification.
  *
  * Resolution never spawns a shell: `command -v` would pull in a login shell's
  * PATH and arbitrary profile scripts. Candidates are probed with `fs` only.
@@ -23,6 +23,7 @@
 import { accessSync, constants, statSync } from 'node:fs';
 import { homedir as osHomedir } from 'node:os';
 import { delimiter, isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Executable installed by `cargo install --locked --path .`. */
 export const BINARY_NAME = 'agent-context';
@@ -95,7 +96,7 @@ export function isExecutableFile(candidate, platform = process.platform) {
  * @param {NodeJS.ProcessEnv} [options.env] environment to read PATH from
  * @param {string} [options.homedir] home directory used for `~/.cargo/bin`
  * @param {NodeJS.Platform} [options.platform]
- * @returns {{ path: string, source: 'config' | 'path' | 'cargo' } | null}
+ * @returns {{ path: string, source: 'config' | 'path' | 'cargo' | 'bundled' } | null}
  *   `null` when nothing was configured and no candidate was found; the caller
  *   then stays inactive instead of guessing.
  * @throws {ConfigError} when `binaryPath` is set but is not an absolute path to
@@ -139,15 +140,18 @@ export function resolveBinary(binaryPath, options = {}) {
 
   // The documented install location, for a GUI host that did not inherit a
   // shell PATH (see docs/clients.md).
-  if (typeof home === 'string' && home !== '' && isAbsolute(home)) {
+  const cargoDirs = [];
+  if (env.CARGO_HOME && isAbsolute(env.CARGO_HOME)) cargoDirs.push(join(env.CARGO_HOME, 'bin'));
+  if (home && isAbsolute(home)) cargoDirs.push(join(home, ...CARGO_BIN_SEGMENTS));
+  for (const dir of new Set(cargoDirs)) {
     for (const name of names) {
-      const candidate = join(home, ...CARGO_BIN_SEGMENTS, name);
-      if (isExecutableFile(candidate, platform)) {
-        return { path: candidate, source: 'cargo' };
-      }
+      const candidate = join(dir, name);
+      if (isExecutableFile(candidate, platform)) return { path: candidate, source: 'cargo' };
     }
   }
-
+  const nativeRoot = options.nativeRoot ?? fileURLToPath(new URL('../native/', import.meta.url));
+  const bundled = join(nativeRoot, platform + '-' + (options.arch ?? process.arch), names[0]);
+  if (isExecutableFile(bundled, platform)) return { path: bundled, source: 'bundled' };
   return null;
 }
 

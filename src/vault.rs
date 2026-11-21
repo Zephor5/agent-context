@@ -108,7 +108,15 @@ impl Vault {
         }
         fs::create_dir_all(dir.join("wiki"))?;
         let vault = Self::open(dir)?;
-        git::run(&vault.root, &["init", "--quiet"])?;
+        if let Err(error) = git::run(&vault.root, &["init", "--quiet"]) {
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|cause| cause.kind() == ErrorKind::NotFound)
+            {
+                return Ok((vault, Some("Git is unavailable; wiki and blackboard tools are ready, version history is disabled".into())));
+            }
+            return Err(error);
+        }
         git::run(&vault.root, &["add", "-A"])?;
         let warning = git::run(
             &vault.root,

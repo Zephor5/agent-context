@@ -7,6 +7,7 @@ let pointerDown = false, listHtml;
 function readingSelection() { const selection = window.getSelection(); return pointerDown || !!selection && !selection.isCollapsed; }
 function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 6000); }
 async function api(path, method = 'GET', body) {
+  if (window.agentContextApi) return window.agentContextApi(path, method, body);
   const response = await fetch(path, {method, headers: {'Content-Type': 'application/json', 'X-Agent-Context': '1'}, ...(body === undefined ? {} : {body: JSON.stringify(body)})});
   const content = await response.text();
   let data; try { data = JSON.parse(content); } catch { data = {error: content}; }
@@ -27,6 +28,13 @@ function dirty() { return state.editing && (state.fresh || $('source').value !==
 async function leaveDraft() {
   if (!dirty()) return true;
   return !!await modal({title:'有尚未保存的修改', message:'离开会丢弃当前草稿。', confirm:'放弃修改', cancel:'继续编辑'});
+}
+let trackEmbeddedDraft = false;
+function rememberDraft() {
+  if (!trackEmbeddedDraft || !window.agentContextSaveDraft || !state.data.root) return;
+  const draft = dirty() ? { root: state.data.root, area: state.area, selected: state.selected,
+    fresh: state.fresh, doc: state.doc, key: $('name').value, text: $('source').value } : null;
+  window.agentContextSaveDraft(draft);
 }
 function currentItem() { return state.data[state.area].find(row => (row.key || row.path) === state.selected); }
 function fingerprint(row) { return !row ? null : state.area === 'board' ? JSON.stringify([row.version,row.value,row.updated_at]) : row.revision; }
@@ -50,6 +58,7 @@ function renderList() {
   if (html !== listHtml) { $('items').innerHTML = html; listHtml = html; }
 }
 function chrome() {
+  rememberDraft();
   $('app').className = `${state.area} ${!state.boardOpen ? 'overview' : ''}`;
   document.querySelectorAll('[data-area]').forEach(button => button.setAttribute('aria-current', button.dataset.area === state.area ? 'page' : 'false'));
   for (const area of ['board','wiki','raw']) $(`count-${area}`).textContent = state.data[area].length;
@@ -85,7 +94,7 @@ function linkify(container) {
     if (/^https?:\/\//i.test(href)) { link.target = '_blank'; link.rel = 'noopener noreferrer'; return; }
     if (!href || /^[a-z]+:/i.test(href)) return;
     try {
-      const base = new URL(state.selected || 'wiki/index.md', location.origin + '/');
+      const base = new URL(state.selected || 'wiki/index.md', (location.origin === 'null' ? 'https://agent-context.invalid' : location.origin) + '/');
       const url = new URL(href, base); const path = decodeURIComponent(url.pathname.slice(1));
       if (path.endsWith('.md') && /^(wiki|raw)\//.test(path)) { link.dataset.page = path; link.href = '/?page=' + encodeURIComponent(path); }
     } catch { /* Keep malformed Markdown links inert. */ link.removeAttribute('href'); }
@@ -216,4 +225,24 @@ $('source').addEventListener('input',()=>{$('dirty').textContent=dirty()?'未保
 $('preview').onclick=async()=>{if(!$('preview-body').hidden){$('preview-body').hidden=true;$('source').hidden=false;$('preview').textContent='预览';return;}try{const result=await api('/api/preview','POST',{text:$('source').value});$('preview-body').innerHTML=result.html;linkify($('preview-body'));$('preview-body').hidden=false;$('source').hidden=true;$('preview').textContent='返回编辑';}catch(e){toast(e.message);}};
 window.addEventListener('beforeunload',event=>{if(dirty()){event.preventDefault();event.returnValue='';}});
 window.addEventListener('keydown',event=>{if((event.metaKey||event.ctrlKey)&&event.key==='s'&&state.editing){event.preventDefault();save();}});
-(async()=>{await refresh();const path=new URLSearchParams(location.search).get('page');if(path&&/^(wiki|raw)\//.test(path)){state.area=path.startsWith('raw/')?'raw':'wiki';await select(path);}else{chrome();renderList();}setInterval(()=>refresh(),3000);})();
+if (window.agentContextApi) {
+  document.addEventListener('input', rememberDraft);
+  document.querySelector('.brand').onclick = async event => { event.preventDefault(); await switchArea('board'); };
+}
+
+(async () => {
+  const draft = await window.agentContextSavedDraft;
+  await refresh();
+  if (draft && draft.root === state.data.root && ['board','wiki'].includes(draft.area)) {
+    state.area = draft.area; state.selected = draft.selected; state.doc = draft.doc;
+    edit(draft.fresh);
+    $('name').value = draft.key; $('source').value = draft.text; $('dirty').textContent = '未保存';
+    renderList(); await refresh(true);
+  } else {
+    const path = new URLSearchParams(location.search).get('page');
+    if (path && /^(wiki|raw)\//.test(path)) { state.area = path.startsWith('raw/') ? 'raw' : 'wiki'; await select(path); }
+    else { chrome(); renderList(); }
+  }
+  trackEmbeddedDraft = true;
+  setInterval(() => refresh(), 3000);
+})();

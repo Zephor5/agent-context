@@ -76,6 +76,54 @@ pub fn open_vault(explicit: Option<&Path>) -> Result<Vault> {
     bail!("首次启动请指定 vault：agent-context web --root <目录>；之后只需 agent-context web")
 }
 
+/// Serve the existing JSON routes to a parent process. EOF releases the vault.
+pub fn serve_stdio(vault: Vault) -> Result<()> {
+    use std::io::{BufRead, stdin, stdout};
+    use tower::ServiceExt;
+    #[derive(Deserialize)]
+    struct Call {
+        path: String,
+        method: String,
+        body: Option<Value>,
+    }
+    let app = router(vault, "localhost".into());
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let mut out = stdout().lock();
+    for line in stdin().lock().lines() {
+        let line = line?;
+        let result: Result<Value> = runtime.block_on(async {
+            let call: Call = serde_json::from_str(&line)?;
+            if !call.path.starts_with("/api/") {
+                bail!("expected a Web API path");
+            }
+            let req = Request::builder()
+                .method(call.method.as_str())
+                .uri(call.path)
+                .header("host", "localhost")
+                .header("x-agent-context", "1")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(match call.body {
+                    Some(body) => serde_json::to_vec(&body)?,
+                    None => Vec::new(),
+                }))?;
+            let response = app.clone().oneshot(req).await?;
+            let status = response.status().as_u16();
+            let bytes = axum::body::to_bytes(response.into_body(), usize::MAX).await?;
+            let body = serde_json::from_slice::<Value>(&bytes)
+                .unwrap_or_else(|_| json!({"error": String::from_utf8_lossy(&bytes)}));
+            Ok(json!({"status": status, "body": body}))
+        });
+        let reply =
+            result.unwrap_or_else(|err| json!({"status": 400, "body": {"error": err.to_string()}}));
+        serde_json::to_writer(&mut out, &reply)?;
+        writeln!(out)?;
+        out.flush()?;
+    }
+    Ok(())
+}
+
 pub async fn serve(vault: Vault, port: u16, open_browser: bool) -> Result<()> {
     let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
         .await

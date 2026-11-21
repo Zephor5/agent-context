@@ -110,7 +110,7 @@ cargo clippy --all-targets -- -D warnings
 
 ## DeepSeek Harness 插件
 
-[DSH 插件](integrations/dsh/README.md) 将本机 agent-context 接入 DSH，会话可以使用同一份 wiki 和黑板。安装和配置方法见插件文档。
+[DSH 插件](integrations/dsh/README.md) 将本机 agent-context 接入 DSH，会话可以使用同一份 wiki 和黑板。插件自带预编译 CLI，可以直接在 DSH 中启用。已有 CLI 和知识库会优先复用。启用后点击 DSH 左侧的 **Agent Context** 可以直接打开与独立 Web 相同的工作台。安装和配置方法见插件文档。
 
 ## 许可证
 

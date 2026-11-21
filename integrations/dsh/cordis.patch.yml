@@ -1,30 +1,10 @@
-# Bundle layer: applied only when the profile lists this package under
-# `dsh.profile.bundles` (the Plugins page toggle). It inserts the plugin with
-# safe defaults — no vault, so nothing is registered until you set one.
-#
-# Pick exactly ONE way to mount it:
-#
-# 1. Bundle enabled: do NOT insert it again from the profile. Configure it with
-#    a top-level id-targeted override in the profile's cordis.patch.yml:
-#      - id: mcp-agent-context
-#        name: 'dsh-agent-context'
-#        config:
-#          vaultRoot: /absolute/path/to/your/vault
-#          # binaryPath: /absolute/path/to/agent-context   # only if it is not on PATH or in ~/.cargo/bin
-# 2. Bundle disabled: wire it by hand with an `- insert:` list in the profile's
-#    cordis.patch.yml (the same shape as below).
-#
-# Doing both mounts the plugin twice, which registers the same MCP server name
-# twice and fails.
+# Existing profile overrides can keep id: mcp-agent-context.
 - insert:
     - id: mcp-agent-context
-      name: 'dsh-agent-context'
+      name: '@zephor/dsh-agent-context'
       config:
         serverName: agent-context
-        # Absolute path of an existing vault (it must contain raw/ and wiki/).
-        # Left empty, the plugin stays inactive: it never creates a vault.
         vaultRoot: ''
-        # Leave empty to search absolute PATH entries, then ~/.cargo/bin.
-        # When set, it is used as given — an invalid value is an error, not a
-        # reason to search.
         binaryPath: ''
+    - id: agent-context-web
+      name: '@zephor/dsh-agent-context/web-host'
