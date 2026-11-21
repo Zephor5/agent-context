@@ -36,7 +36,7 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: |
-          archive=release/zephor-dsh-agent-context-0.2.1.tgz
+          archive=./release/zephor-dsh-agent-context-0.2.1.tgz
           tar -xOzf "$archive" package/package.json | jq -e '.name == "@zephor/dsh-agent-context" and .version == "0.2.1"'
           for platform in darwin-arm64 darwin-x64 linux-arm64 linux-x64 win32-x64; do
             bin=agent-context
